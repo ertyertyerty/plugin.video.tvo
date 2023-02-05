@@ -102,8 +102,7 @@ class myAddon(t1mAddon):
  
       show_title= episodes_js["data"]["getTVOOrgProgramOverview"]["title"]
       # Loop through seasons
-      sdata_js = episodes_js["data"]["getTVOOrgProgramOverview"]["seasons"]
-      for j in sdata_js:
+      for j in episodes_js["data"]["getTVOOrgProgramOverview"]["seasons"]:
           season   = j["season"]
           for k in j["episodes"]:
             episode = k["episode"]
@@ -111,14 +110,7 @@ class myAddon(t1mAddon):
             url     = k["path"]
             thumb   = k["imageSrc"]
             plot    = k["description"]
-            timetmp = k["duration"]
-            if timetmp.count(':') == 0:
-              duration = timetmp
-            else:
-              if timetmp.count(':') == 1:
-                timetmp = "0:" + timetmp
-              # Calculate time in seconds
-              duration = sum(x * int(t) for x, t in zip([3600, 60, 1], timetmp.split(":")))
+            duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(k["duration"].split(":"))))
             infoList= {'mediatype': 'episode',
                        'TVShowTitle': show_title,
                        'Title': name,
@@ -138,20 +130,13 @@ class myAddon(t1mAddon):
       response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
       movie_js = json.loads(response.text)
  
-      dtl = movie_js["data"]["getTVOOrgVideo"]
-      name    = dtl["title"]
-      url     = dtl["nodeUrl"]
-      thumb   = dtl["thumbnail"]
-      cover   = dtl["program"]["coverImage"]
-      plot    = dtl["description"]
-      timetmp = dtl["length"]
-      if timetmp.count(':') == 0:
-        duration = timetmp
-      else:
-        if timetmp.count(':') == 1:
-          timetmp = "0:" + timetmp
-          # Calculate time in seconds
-        duration = sum(x * int(t) for x, t in zip([3600, 60, 1], timetmp.split(":")))
+      movie = movie_js["data"]["getTVOOrgVideo"]
+      name    = movie["title"]
+      url     = movie["nodeUrl"]
+      thumb   = movie["thumbnail"]
+      cover   = movie["program"]["coverImage"]
+      plot    = movie["description"]
+      duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(movie["length"].split(":"))))
       infoList= {'mediatype': 'movie',
                  'Title': name,
                  'Duration': duration,
