@@ -19,7 +19,7 @@ HEADERS = {'User-Agent': USERAGENT,
            'Accept': "application/json, text/javascript, text/html,*/*",
            'Accept-Encoding': 'gzip,deflate,sdch',
            'Accept-Language': 'en-US,en;q=0.8'}
-PAGESIZE = 20
+PAGESIZE = 0  # Originally set to 20
  
 class myAddon(t1mAddon):
  
@@ -80,10 +80,10 @@ class myAddon(t1mAddon):
             ilist = self.addMenuItem(name, 'GE', ilist, url, cover, thumb, infoList, isFolder=True)
           else:
             ilist = self.addMenuItem(name, 'GM', ilist, url, cover, thumb, infoList, isFolder=True)
-      # Add "MORE" prompt if there are more shows to list
-      if ((int(position)+int(PAGESIZE)) < numShows):
-          nextUrl = caturl + '|' + str(int(int(position)+int(PAGESIZE)))
-          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GS', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
+#      # Add "MORE" prompt if there are more shows to list
+#      if ((int(position)+int(PAGESIZE)) < numShows):
+#          nextUrl = caturl + '|' + str(int(int(position)+int(PAGESIZE)))
+#          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GS', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
       return(ilist)
  
  
