@@ -10,6 +10,7 @@ import xbmcplugin
 import xbmcgui
 import sys
 import requests
+from datetime import datetime
  
 URL_GRAPHQL_SERVER = "https://hmy0rc1bo2.execute-api.ca-central-1.amazonaws.com/graphql"
 USERAGENT = 'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.101 Safari/537.36'
@@ -19,7 +20,7 @@ HEADERS = {'User-Agent': USERAGENT,
            'Accept': "application/json, text/javascript, text/html,*/*",
            'Accept-Encoding': 'gzip,deflate,sdch',
            'Accept-Language': 'en-US,en;q=0.8'}
-PAGESIZE = 0  # Originally set to 20
+PAGESIZE = 20
  
 class myAddon(t1mAddon):
  
@@ -32,27 +33,25 @@ class myAddon(t1mAddon):
       response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
       cats_js = json.loads(response.text)
       for cat in cats_js["data"]["getTVOOrgCategoriesMenu"]:
-        name = cat["categoryTitle"]
-        plot = cat["path"]
-        url = name + '|0'
-        infoList = {'mediatype':'tvshow',
+          name = cat["categoryTitle"]
+          plot = cat["path"]
+          url = name
+          infoList = {'mediatype':'tvshow',
                     'Title': name,
                     'Plot': plot}
-        # Skip entries that are 'SeriesDocsFilterContentnot' rather than 'SeriesDocsCategory'
-        if (name != 'All' and name != 'Series' and name != 'Docs' and name != 'A-Z'):
-          ilist = self.addMenuItem(name, 'GS', ilist, url, self.addonIcon, self.addonFanart, infoList, isFolder=True)
+          # Skip entries that are 'SeriesDocsFilterContentnot' rather than 'SeriesDocsCategory'
+          if (name != 'All' and name != 'Series' and name != 'Docs' and name != 'A-Z' and name != 'National Geographic'):
+              ilist = self.addMenuItem(name, 'GS', ilist, url, self.addonIcon, self.addonFanart, infoList, isFolder=True)
       return(ilist)
  
   def getAddonShows(self, url, ilist):
-      # Split into relative list position and category url
-      caturl = url.split('|', 1)[0]
-      position = url.split('|', 1)[1]
       json_data = {
         'operationName': 'SeriesDocsCategory',
         'variables': {
-          'category': caturl,
-          'first': int(PAGESIZE),
-          'after': int(position),
+          'category': url,
+          # Able to get all shows in a category by setting 'first' and 'after' to 0
+          'first': 0,
+          'after': 0,
         },
         'query': 'query SeriesDocsCategory($category: String!, $first: Int, $after: Int) {\n categoryData: getTVOOrgCategoriesByName(\n name: $category\n first: $first\n after: $after\n) {\n totalItems\n content {\n programTitle\n path\n imageSrc\n episode\n program {\n coverImage\n }\n }\n }\n}\n'
       }
@@ -66,36 +65,81 @@ class myAddon(t1mAddon):
       for show in shows_js["data"]["categoryData"][0]["content"]:
           episodes = show["episode"]
           if (int(episodes) > 1):
-            name = "%s (Series)" % (show["programTitle"])
+              name = "%s (Series)" % (show["programTitle"])
           else:
-            name = show["programTitle"]
+              name = show["programTitle"]
           url = show["path"]
           thumb = show["imageSrc"]
           cover = show["program"]["coverImage"]
+          if cover == "": cover = thumb
           plot = show["programTitle"]
           infoList= {'mediatype': 'tvshow',
                      'Title': name,
                      'Plot': plot}
-          if (int(episodes) > 1):
-            ilist = self.addMenuItem(name, 'GE', ilist, url, cover, thumb, infoList, isFolder=True)
+          if 'The Agenda' in name:
+              ilist = self.addMenuItem(name, 'GL', ilist, url+'|0', cover, thumb, infoList, isFolder=True)
+          elif (int(episodes) > 1):
+              ilist = self.addMenuItem(name, 'GE', ilist, url, cover, thumb, infoList, isFolder=True)
           else:
-            ilist = self.addMenuItem(name, 'GM', ilist, url, cover, thumb, infoList, isFolder=True)
-#      # Add "MORE" prompt if there are more shows to list
-#      if ((int(position)+int(PAGESIZE)) < numShows):
-#          nextUrl = caturl + '|' + str(int(int(position)+int(PAGESIZE)))
-#          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GS', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
+              ilist = self.addMenuItem(name, 'GM', ilist, url, cover, thumb, infoList, isFolder=True)
       return(ilist)
  
+
+### Using 'getAddonListing' for 'The Agenda' since it uses a different query than the 
+### other shows and 'getAddonListing' is already in t1mlib.py with an 'episodes' format.
+
+  def getAddonListing(self, url, ilist):
+      self.defaultVidStream['width']  = 1280
+      self.defaultVidStream['height'] = 720
+      # Split into relative list position and category url
+      caturl   = url.split('|', 1)[0]
+      position = url.split('|', 1)[1]
+      json_data = {
+        'operationName': 'AgendaRecentSegments',
+        'variables': {
+          'name':'theagenda',
+          'first':int(PAGESIZE),
+          'after':int(position),
+        },
+        'query': 'query AgendaRecentSegments($name: String!, $first: Int, $after: Int) {\n recentSegments: getTVOSpecialProgramContent(\n name: $name\n first: $first\n after: $after\n ) {\n totalItems\n content {\n path\n imageSrc\n season\n episode\n episodeTitle\n description\n airDate\n duration\n }\n }\n}\n'
+      }
+      response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
+      agenda_js = json.loads(response.text)
+ 
+      numShows = agenda_js["data"]["recentSegments"]["totalItems"]
+      show_title= 'The Agenda'
+      # Loop through seasons
+      for j in agenda_js["data"]["recentSegments"]["content"]:
+          season  = j["season"]
+          episode = j["episode"]
+          name    = j["episodeTitle"]
+          url     = j["path"]
+          thumb   = j["imageSrc"]
+          aired   = j["airDate"]
+          plot    = '%s\nAir Date: %s, Season:%s, Episode:%s' % (j["description"], aired, str(season), str(episode))
+          duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(j["duration"].split(":"))))
+          infoList= {'mediatype': 'episode',
+                     'TVShowTitle': '%s - Season:%s, Episode:%s' % (show_title,str(season),str(episode)),
+                     'Title': name,
+                     'Duration': duration,
+                     'Plot': plot,
+                     'premiered': str(datetime.strptime(aired, '%b %d, %Y').date())}
+          ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
+      # Add "MORE" prompt if there are more shows to list
+      if ((int(position)+int(PAGESIZE)) < numShows):
+          nextUrl = caturl + '|' + str(int(int(position)+int(PAGESIZE)))
+          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GL', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
+      return(ilist)
  
   def getAddonEpisodes(self, url, ilist):
-      self.defaultVidStream['width']  = 640
-      self.defaultVidStream['height'] = 480
+      self.defaultVidStream['width']  = 1280
+      self.defaultVidStream['height'] = 720
       json_data = {
         'operationName': 'ProgramOverview',
         'variables': {
           'slug': url,
         },
-        'query': 'query ProgramOverview($slug: String) {\n getTVOOrgProgramOverview(slug: $slug) {\n title\n description\n featuredImage\n seasons {\n season\n episodes {\n episodeTitle\n imageSrc\n path\n duration\n episode\n description\n }\n }\n }\n}\n',
+        'query': 'query ProgramOverview($slug: String) {\n getTVOOrgProgramOverview(slug: $slug) {\n title\n description\n featuredImage\n seasons {\n season\n episodes {\n episodeTitle\n imageSrc\n path\n duration\n episode\n description\n }\n }\n }\n}\n'
       }
       response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
       episodes_js = json.loads(response.text)
@@ -105,18 +149,18 @@ class myAddon(t1mAddon):
       for j in episodes_js["data"]["getTVOOrgProgramOverview"]["seasons"]:
           season   = j["season"]
           for k in j["episodes"]:
-            episode = k["episode"]
-            name    = 'S%sE%s - %s' % (str(season), str(episode), k["episodeTitle"])
-            url     = k["path"]
-            thumb   = k["imageSrc"]
-            plot    = k["description"]
-            duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(k["duration"].split(":"))))
-            infoList= {'mediatype': 'episode',
-                       'TVShowTitle': show_title,
-                       'Title': name,
-                       'Duration': duration,
-                       'Plot': plot}
-            ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
+              episode = k["episode"]
+              name    = 'S%sE%s - %s' % (str(season), str(episode), k["episodeTitle"])
+              url     = k["path"]
+              thumb   = k["imageSrc"]
+              plot    = k["description"]
+              duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(k["duration"].split(":"))))
+              infoList= {'mediatype': 'episode',
+                         'TVShowTitle': show_title,
+                         'Title': name,
+                         'Duration': duration,
+                         'Plot': plot}
+              ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
       return(ilist)
  
   def getAddonMovies(self, url, ilist):
@@ -125,7 +169,7 @@ class myAddon(t1mAddon):
         'variables': {
           'slug': url,
         },
-        'query': 'query getVideo($slug: String) {\n getTVOOrgVideo(slug: $slug) {\n nodeUrl\n thumbnail\n title\n program {\n coverImage\n }\n description\n length\n }\n}\n',
+        'query': 'query getVideo($slug: String) {\n getTVOOrgVideo(slug: $slug) {\n nodeUrl\n thumbnail\n title\n program {\n coverImage\n }\n description\n length\n }\n}\n'
       }
       response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
       movie_js = json.loads(response.text)
@@ -150,7 +194,7 @@ class myAddon(t1mAddon):
         'variables': {
           'slug': url,
         },
-        'query': 'query getVideo($slug: String) {\n getTVOOrgVideo(slug: $slug) {\n assetUrl\n thumbnail\n description\n length\n }\n}\n',
+        'query': 'query getVideo($slug: String) {\n getTVOOrgVideo(slug: $slug) {\n assetUrl\n thumbnail\n description\n length\n }\n}\n'
       }
       response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
       video_js = json.loads(response.text)
@@ -158,7 +202,6 @@ class myAddon(t1mAddon):
       # Play video
       vidurl = video_js["data"]["getTVOOrgVideo"]["assetUrl"]
       if vidurl == '':
-        return False
+          return False
       liz = xbmcgui.ListItem(path=vidurl)
       xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, liz)
- 
