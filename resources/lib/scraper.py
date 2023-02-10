@@ -21,7 +21,8 @@ HEADERS = {'User-Agent': USERAGENT,
            'Accept-Encoding': 'gzip,deflate,sdch',
            'Accept-Language': 'en-US,en;q=0.8'}
 PAGESIZE = 20
- 
+SEARCHPAGESIZE = '100'
+
 class myAddon(t1mAddon):
  
   def getAddonMenu(self, url, ilist):
@@ -35,23 +36,24 @@ class myAddon(t1mAddon):
       for cat in cats_js["data"]["getTVOOrgCategoriesMenu"]:
           name = cat["categoryTitle"]
           plot = cat["path"]
-          url = name
+          url  = name
           infoList = {'mediatype':'tvshow',
-                    'Title': name,
-                    'Plot': plot}
-          # Skip entries that are 'SeriesDocsFilterContentnot' rather than 'SeriesDocsCategory'
-          if (name != 'All' and name != 'Series' and name != 'Docs' and name != 'A-Z' and name != 'National Geographic'):
+                      'Title': name,
+                      'Plot': plot}
+          # Include entries that are 'SeriesDocsCategory' rather than 'SeriesDocsFilterContentnot'
+          if (name not in ['All', 'Series', 'Docs', 'A-Z', 'National Geographic']):
               ilist = self.addMenuItem(name, 'GS', ilist, url, self.addonIcon, self.addonFanart, infoList, isFolder=True)
+      ilist = self.addMenuItem('Search', 'SE', ilist, '|0', self.addonIcon, self.addonFanart, {'Title': 'Search'}, isFolder=True)
       return(ilist)
  
   def getAddonShows(self, url, ilist):
       json_data = {
         'operationName': 'SeriesDocsCategory',
         'variables': {
-          'category': url,
           # Able to get all shows in a category by setting 'first' and 'after' to 0
           'first': 0,
           'after': 0,
+          'category': url,
         },
         'query': 'query SeriesDocsCategory($category: String!, $first: Int, $after: Int) {\n categoryData: getTVOOrgCategoriesByName(\n name: $category\n first: $first\n after: $after\n) {\n totalItems\n content {\n programTitle\n path\n imageSrc\n episode\n program {\n coverImage\n }\n }\n }\n}\n'
       }
@@ -68,11 +70,11 @@ class myAddon(t1mAddon):
               name = "%s (Series)" % (show["programTitle"])
           else:
               name = show["programTitle"]
-          url = show["path"]
+          url   = show["path"]
           thumb = show["imageSrc"]
+          plot  = show["programTitle"]
           cover = show["program"]["coverImage"]
           if cover == "": cover = thumb
-          plot = show["programTitle"]
           infoList= {'mediatype': 'tvshow',
                      'Title': name,
                      'Plot': plot}
@@ -97,9 +99,9 @@ class myAddon(t1mAddon):
       json_data = {
         'operationName': 'AgendaRecentSegments',
         'variables': {
-          'name':'theagenda',
-          'first':int(PAGESIZE),
-          'after':int(position),
+          'name'  : 'theagenda',
+          'first' : int(PAGESIZE),
+          'after' : int(position),
         },
         'query': 'query AgendaRecentSegments($name: String!, $first: Int, $after: Int) {\n recentSegments: getTVOSpecialProgramContent(\n name: $name\n first: $first\n after: $after\n ) {\n totalItems\n content {\n path\n imageSrc\n season\n episode\n episodeTitle\n description\n airDate\n duration\n }\n }\n}\n'
       }
@@ -205,3 +207,39 @@ class myAddon(t1mAddon):
           return False
       liz = xbmcgui.ListItem(path=vidurl)
       xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, liz)
+
+
+  def getAddonSearch(self, url, ilist):
+      query = url.split('|', 1)[0]
+      page  = int(url.split('|', 1)[1])
+      if page == 0: query = xbmcgui.Dialog().input('Enter search term')
+      page += 1
+      self.defaultVidStream['width']  = 1280
+      self.defaultVidStream['height'] = 720
+
+      URL_SWIFTYPE_SERVER = "https://search-api.swiftype.com/api/v1/public/engines/search.json?"
+      json_data = { 'q':query, 'page':str(page), 'per_page':SEARCHPAGESIZE, 'engine_key':'aBsuBkeq84LGLQsYdWMV'}
+      response = requests.post(URL_SWIFTYPE_SERVER, headers=HEADERS, json=json_data)
+      search_js = json.loads(response.text)
+      # Loop through the search results
+      for j in search_js["records"]["page"]:
+          if j["type"] == 'video':
+              title  = j["title"]
+              name   = j["title"]
+              thumb  = j["image"]
+              aired  = j["published_at"]
+              url    = j["url"].replace('https://www.tvo.org','')
+              plot   = j["desc"]
+              infoList = {'mediatype': 'movie',
+                          'TVShowTitle': title,
+                          'Title': title,
+                          'Plot': plot,
+                          'premiered': str(datetime.fromisoformat(aired[:-1]).date()),
+              }
+              ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
+      # Add "MORE" prompt if there are more search results to list
+      pages = search_js["info"]["page"]["num_pages"]
+      if page < int(pages):
+          nextUrl = query + '|' + str(page)
+          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'SE', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
+      return(ilist)
