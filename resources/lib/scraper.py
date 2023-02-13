@@ -43,7 +43,7 @@ class myAddon(t1mAddon):
           # Include entries that are 'SeriesDocsCategory' rather than 'SeriesDocsFilterContentnot'
           if (name not in ['All', 'Series', 'Docs', 'A-Z', 'National Geographic']):
               ilist = self.addMenuItem(name, 'GS', ilist, url, self.addonIcon, self.addonFanart, infoList, isFolder=True)
-      ilist = self.addMenuItem('Search', 'SE', ilist, '|0', self.addonIcon, self.addonFanart, {'Title': 'Search'}, isFolder=True)
+      ilist = self.addMenuItem('Search', 'SQ', ilist, '|0', self.addonIcon, self.addonFanart, {'Title': 'Search'}, isFolder=True)
       return(ilist)
  
   def getAddonShows(self, url, ilist):
@@ -79,7 +79,7 @@ class myAddon(t1mAddon):
                      'Title': name,
                      'Plot': plot}
           if 'The Agenda' in name:
-              ilist = self.addMenuItem(name, 'GL', ilist, url+'|0', cover, thumb, infoList, isFolder=True)
+              ilist = self.addMenuItem(name, 'GE2', ilist, url+'|0', cover, thumb, infoList, isFolder=True)
           elif (int(episodes) > 1):
               ilist = self.addMenuItem(name, 'GE', ilist, url, cover, thumb, infoList, isFolder=True)
           else:
@@ -87,10 +87,39 @@ class myAddon(t1mAddon):
       return(ilist)
  
 
-### Using 'getAddonListing' for 'The Agenda' since it uses a different query than the 
-### other shows and 'getAddonListing' is already in t1mlib.py with an 'episodes' format.
-
-  def getAddonListing(self, url, ilist):
+  def getAddonEpisodes(self, url, ilist):
+      self.defaultVidStream['width']  = 1280
+      self.defaultVidStream['height'] = 720
+      json_data = {
+        'operationName': 'ProgramOverview',
+        'variables': {
+          'slug': url,
+        },
+        'query': 'query ProgramOverview($slug: String) {\n getTVOOrgProgramOverview(slug: $slug) {\n title\n description\n featuredImage\n seasons {\n season\n episodes {\n episodeTitle\n imageSrc\n path\n duration\n episode\n description\n }\n }\n }\n}\n'
+      }
+      response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
+      episodes_js = json.loads(response.text)
+ 
+      show_title= episodes_js["data"]["getTVOOrgProgramOverview"]["title"]
+      # Loop through seasons
+      for j in episodes_js["data"]["getTVOOrgProgramOverview"]["seasons"]:
+          season   = j["season"]
+          for k in j["episodes"]:
+              episode = k["episode"]
+              name    = 'S%sE%s - %s' % (str(season), str(episode), k["episodeTitle"])
+              url     = k["path"]
+              thumb   = k["imageSrc"]
+              plot    = k["description"]
+              duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(k["duration"].split(":"))))
+              infoList= {'mediatype': 'episode',
+                         'TVShowTitle': show_title,
+                         'Title': name,
+                         'Duration': duration,
+                         'Plot': plot}
+              ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
+      return(ilist)
+ 
+  def getAddonEpisodes2(self, url, ilist):    # For 'The Agenda' as it uses a unique post request
       self.defaultVidStream['width']  = 1280
       self.defaultVidStream['height'] = 720
       # Split into relative list position and category url
@@ -129,40 +158,8 @@ class myAddon(t1mAddon):
           ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
       # Add "MORE" prompt if there are more shows to list
       if ((int(position)+int(PAGESIZE)) < numShows):
-          nextUrl = caturl + '|' + str(int(int(position)+int(PAGESIZE)))
-          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GL', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
-      return(ilist)
- 
-  def getAddonEpisodes(self, url, ilist):
-      self.defaultVidStream['width']  = 1280
-      self.defaultVidStream['height'] = 720
-      json_data = {
-        'operationName': 'ProgramOverview',
-        'variables': {
-          'slug': url,
-        },
-        'query': 'query ProgramOverview($slug: String) {\n getTVOOrgProgramOverview(slug: $slug) {\n title\n description\n featuredImage\n seasons {\n season\n episodes {\n episodeTitle\n imageSrc\n path\n duration\n episode\n description\n }\n }\n }\n}\n'
-      }
-      response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
-      episodes_js = json.loads(response.text)
- 
-      show_title= episodes_js["data"]["getTVOOrgProgramOverview"]["title"]
-      # Loop through seasons
-      for j in episodes_js["data"]["getTVOOrgProgramOverview"]["seasons"]:
-          season   = j["season"]
-          for k in j["episodes"]:
-              episode = k["episode"]
-              name    = 'S%sE%s - %s' % (str(season), str(episode), k["episodeTitle"])
-              url     = k["path"]
-              thumb   = k["imageSrc"]
-              plot    = k["description"]
-              duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(k["duration"].split(":"))))
-              infoList= {'mediatype': 'episode',
-                         'TVShowTitle': show_title,
-                         'Title': name,
-                         'Duration': duration,
-                         'Plot': plot}
-              ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
+          nextUrl = caturl + '|' + str(int(position)+int(PAGESIZE))
+          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GE2', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
       return(ilist)
  
   def getAddonMovies(self, url, ilist):
@@ -209,11 +206,15 @@ class myAddon(t1mAddon):
       xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, liz)
 
 
+  def getAddonSearchQuery(self, url, ilist):  # First step in two step process; to fix the refresh asking for input again
+      query = xbmcgui.Dialog().input('Enter search term') + '|1'
+      ilist = self.addMenuItem('Results', 'SE', ilist, query, self.addonIcon, self.addonFanart, {'Title': 'Results'}, isFolder=True)
+      return(ilist)
+
+
   def getAddonSearch(self, url, ilist):
       query = url.split('|', 1)[0]
       page  = int(url.split('|', 1)[1])
-      if page == 0: query = xbmcgui.Dialog().input('Enter search term')
-      page += 1
       self.defaultVidStream['width']  = 1280
       self.defaultVidStream['height'] = 720
 
@@ -240,6 +241,6 @@ class myAddon(t1mAddon):
       # Add "MORE" prompt if there are more search results to list
       pages = search_js["info"]["page"]["num_pages"]
       if page < int(pages):
-          nextUrl = query + '|' + str(page)
+          nextUrl = query + '|' + str(page+1)
           ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'SE', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
       return(ilist)

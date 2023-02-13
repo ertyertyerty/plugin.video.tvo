@@ -5,7 +5,7 @@
        provider-name="ertyertyerty">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
-    <import addon="script.module.t1mlib" version="4.0.7"/>
+    <import addon="script.module.t1mlib" version="4.0.8"/>
     <import addon="script.module.requests" version="2.6.0"/>
   </requires>
   <extension point="xbmc.python.pluginsource"
