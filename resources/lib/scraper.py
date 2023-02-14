@@ -207,8 +207,9 @@ class myAddon(t1mAddon):
 
 
   def getAddonSearchQuery(self, url, ilist):  # First step in two step process; to fix the refresh asking for input again
-      query = xbmcgui.Dialog().input('Enter search term') + '|1'
-      ilist = self.addMenuItem('Results', 'SE', ilist, query, self.addonIcon, self.addonFanart, {'Title': 'Results'}, isFolder=True)
+      query = xbmcgui.Dialog().input('Enter search term')
+      infoList = {'Title': "Search for: '%s'" % (query)}
+      ilist = self.addMenuItem('Results', 'SE', ilist, query+'|1', self.addonIcon, self.addonFanart, infoList, isFolder=True)
       return(ilist)
 
 
