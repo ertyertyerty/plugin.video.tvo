@@ -20,12 +20,12 @@ HEADERS = {'User-Agent': USERAGENT,
            'Accept': "application/json, text/javascript, text/html,*/*",
            'Accept-Encoding': 'gzip,deflate,sdch',
            'Accept-Language': 'en-US,en;q=0.8'}
-PAGESIZE = 20
+AGENDAPAGESIZE = 20
 SEARCHPAGESIZE = 100
 PODCASTPAGESIZE = 50
 
 class myAddon(t1mAddon):
- 
+
   def getAddonMenu(self, url, ilist):
       json_data = {
         'operationName': 'SeriesAndDocsNav',
@@ -44,9 +44,11 @@ class myAddon(t1mAddon):
           # Include entries that are 'SeriesDocsCategory' rather than 'SeriesDocsFilterContent'
           if (name not in ['All', 'Series', 'Docs', 'A-Z', 'National Geographic']):
               ilist = self.addMenuItem(name, 'GS', ilist, url, self.addonIcon, self.addonFanart, infoList, isFolder=True)
-      ilist = self.addMenuItem('Podcasts', 'GS2', ilist, '|0', self.addonIcon, self.addonFanart, {'Title': 'Podcasts'}, isFolder=True)
-      ilist = self.addMenuItem('Search', 'SQ', ilist, '|0', self.addonIcon, self.addonFanart, {'Title': 'Search'}, isFolder=True)
+      ilist = self.addMenuItem('Podcasts', 'GS2', ilist, '|0', self.addonIcon, self.addonFanart, {}, isFolder=True)
+      ilist = self.addMenuItem('Schedule', 'GL', ilist, '|0', self.addonIcon, self.addonFanart, {}, isFolder=True)
+      ilist = self.addMenuItem('Search', 'SQ', ilist, '|0', self.addonIcon, self.addonFanart, {}, isFolder=True)
       return(ilist)
+
  
   def getAddonShows(self, url, ilist):
       json_data = {
@@ -159,7 +161,7 @@ class myAddon(t1mAddon):
         'operationName': 'AgendaRecentSegments',
         'variables': {
           'name'  : 'theagenda',
-          'first' : int(PAGESIZE),
+          'first' : int(AGENDAPAGESIZE),
           'after' : int(position),
         },
         'query': 'query AgendaRecentSegments($name: String!, $first: Int, $after: Int) {\n recentSegments: getTVOSpecialProgramContent(\n name: $name\n first: $first\n after: $after\n ) {\n totalItems\n content {\n path\n imageSrc\n season\n episode\n episodeTitle\n description\n airDate\n duration\n }\n }\n}\n'
@@ -187,8 +189,8 @@ class myAddon(t1mAddon):
                      'premiered': str(datetime.strptime(aired, '%b %d, %Y').date())}
           ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
       # Add "MORE" prompt if there are more shows to list
-      if ((int(position)+int(PAGESIZE)) < numShows):
-          nextUrl = showurl + '|' + str(int(position)+int(PAGESIZE))
+      if ((int(position)+int(AGENDAPAGESIZE)) < numShows):
+          nextUrl = showurl + '|' + str(int(position)+int(AGENDAPAGESIZE))
           ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GE2', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
       return(ilist)
  
@@ -324,3 +326,52 @@ class myAddon(t1mAddon):
           nextUrl = query + '|' + str(page+1)
           ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'SE', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
       return(ilist)
+
+
+  def getAddonListing(self, url, ilist):   # Get TVO Schedule
+      day    = url.split('|', 1)[0]
+      option = int(url.split('|', 1)[1])
+      if option == 0:   # Display the list of available days
+          json_data = {
+            'operationName': 'ScheduleDateFilter',
+            'variables': {},
+            'query': 'query ScheduleDateFilter {\n getTVOOrgScheduleDateFilters {\n day\n monthDate\n fullDate\n }\n}\n'
+          }
+          response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
+          days_js = json.loads(response.text)
+          # Gather the days
+          for j in days_js["data"]["getTVOOrgScheduleDateFilters"]:
+              name     = '%s, %s' % (j["day"], j["monthDate"])
+              url      = j["fullDate"]
+              infoList = {'mediatype': 'movie',
+                          'Title': name,
+              }
+              ilist = self.addMenuItem(name, 'GL', ilist, url+'|1', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+      elif option == 1 or option == 2:  # Option 1: display just evening and late night shows; Option 2: display the whole day
+          if option == 1:
+              ilist = self.addMenuItem('[COLOR yellow]See full day schedule[/COLOR]', 'GL', ilist, day+'|2', self.addonIcon, self.addonFanart, {}, isFolder=True)
+          json_data = {
+            'operationName': 'ScheduleDayEpisodes',
+            'variables': {'date': day },
+            'query': 'query ScheduleDayEpisodes($date: String) {\n getTVOOrgScheduleFullDay(date: $date) {\n timeOfDay\n airDate\n title\n seriesTitle\n description\n \n}\n}\n'
+          }
+          response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
+          days_js = json.loads(response.text)
+          # Gather the programming
+          for j in days_js["data"]["getTVOOrgScheduleFullDay"]:
+              seriesTitle = j["seriesTitle"]
+              description = j["description"]
+              title       = j["title"]
+              airDate     = j["airDate"]
+              timeOfDay   = j["timeOfDay"]
+              url         = j["title"]
+              infoList = {'mediatype': 'episode',
+                          'Title': '%s - %s (%s)' % (airDate, seriesTitle, title),
+                          'Plot' : '%s\n"%s"\n%s' % (day, title, description),
+              }
+              if option == 1 and timeOfDay in ['Evening', 'Late Night']:
+                  ilist = self.addMenuItem('', 'GL', ilist, url+'|3', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+              elif option == 2:
+                  ilist = self.addMenuItem('', 'GL', ilist, url+'|3', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+      return(ilist)
+
