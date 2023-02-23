@@ -3,8 +3,6 @@
 #
 from t1mlib import t1mAddon
 import json
-import re
-import os
 import xbmc
 import xbmcplugin
 import xbmcgui
@@ -41,20 +39,22 @@ class myAddon(t1mAddon):
           infoList = {'mediatype':'tvshow',
                       'Title': name,
                       'Plot': plot}
-          # Include entries that are 'SeriesDocsCategory' rather than 'SeriesDocsFilterContent'
-          if (name not in ['All', 'Series', 'Docs', 'A-Z', 'National Geographic']):
-              ilist = self.addMenuItem(name, 'GS', ilist, url, self.addonIcon, self.addonFanart, infoList, isFolder=True)
-      ilist = self.addMenuItem('Podcasts', 'GS2', ilist, '|0', self.addonIcon, self.addonFanart, {}, isFolder=True)
+          # Screen out 'All' and 'National Geographic'; separate function for 'Series', 'Docs', 'A-Z'
+          if name in ['Series', 'Docs', 'A-Z']:
+              ilist = self.addMenuItem(name, 'GS', ilist, url+'|3', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+          elif name not in ['All', 'National Geographic']:
+              ilist = self.addMenuItem(name, 'GS', ilist, url+'|1', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+      ilist = self.addMenuItem('Podcasts', 'GS', ilist, '|2', self.addonIcon, self.addonFanart, {}, isFolder=True)
       ilist = self.addMenuItem('Schedule', 'GL', ilist, '|0', self.addonIcon, self.addonFanart, {}, isFolder=True)
-      ilist = self.addMenuItem('Search', 'SQ', ilist, '|0', self.addonIcon, self.addonFanart, {}, isFolder=True)
-      return(ilist)
+      ilist = self.addMenuItem('Search', 'SE', ilist, '|1|0', self.addonIcon, self.addonFanart, {}, isFolder=True)
+      return ilist
 
  
-  def getAddonShows(self, url, ilist):
+  def getAddonShows1(self, url, ilist):  # Get shows other than podcasts, 'Series', 'Docs' and 'A-Z'
       json_data = {
         'operationName': 'SeriesDocsCategory',
         'variables': {
-          # Able to get all shows in a category by setting 'first' and 'after' to 0
+          # Able to get ALL shows by setting 'first' and 'after' to 0
           'first': 0,
           'after': 0,
           'category': url,
@@ -64,31 +64,30 @@ class myAddon(t1mAddon):
       response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
       shows_js = json.loads(response.text)
  
-      # Get total number of shows in the category
-      numShows = shows_js["data"]["categoryData"][0]["totalItems"]
- 
       # Loop through all shows in the category
       for show in shows_js["data"]["categoryData"][0]["content"]:
-          episodes = show["episode"]
-          if (int(episodes) > 1):
+          episodes = int(show["episode"])
+          if episodes > 1:
               name = "%s (Series)" % (show["programTitle"])
           else:
               name = show["programTitle"]
-          url   = show["path"]
-          thumb = show["imageSrc"]
-          plot  = show["programTitle"]
-          cover = show["program"]["coverImage"]
+          url    = show["path"]
+          thumb  = show["imageSrc"]
+          plot   = show["programTitle"]
+          cover  = show["program"]["coverImage"]
           if cover == "": cover = thumb
           infoList= {'mediatype': 'tvshow',
                      'Title': name,
+                     'episode': episodes,
+                     'season': 1,
                      'Plot': plot}
           if 'The Agenda' in name:
-              ilist = self.addMenuItem(name, 'GE2', ilist, url+'|0', cover, thumb, infoList, isFolder=True)
-          elif (int(episodes) > 1):
-              ilist = self.addMenuItem(name, 'GE', ilist, url, cover, thumb, infoList, isFolder=True)
+              ilist = self.addMenuItem(name, 'GE', ilist, url+'|2|0', cover, thumb, infoList, isFolder=True)
+          elif episodes > 1:
+              ilist = self.addMenuItem(name, 'GE', ilist, url+'|1|0', cover, thumb, infoList, isFolder=True)
           else:
               ilist = self.addMenuItem(name, 'GM', ilist, url, cover, thumb, infoList, isFolder=True)
-      return(ilist)
+      return ilist
  
  
   def getAddonShows2(self, url, ilist):   # Get TVO Podcasts
@@ -105,17 +104,72 @@ class myAddon(t1mAddon):
           show     = j["program"]
           episodes = show["defaultPlaylist"]["totalItems"]
           name     = "%s (%s episodes)" % (show["title"], episodes)
-          url      = show["omnySlug"] + '|1'
+          url      = show["omnySlug"]
           thumb    = show["featuredImage"]
           plot     = show["description"]
           infoList= {'mediatype': 'tvshow',
                      'Title': name,
+                     'episode': int(episodes),
+                     'season': 1,
                      'Plot': plot}
-          ilist = self.addMenuItem(name, 'GE3', ilist, url, thumb, thumb, infoList, isFolder=True)
-      return(ilist)
+          ilist = self.addMenuItem(name, 'GE', ilist, url+'|3|1', thumb, thumb, infoList, isFolder=True)
+      return ilist
+
+
+  def getAddonShows3(self, url, ilist):   # Get 'Docs', 'Series' and 'A-Z'
+      json_data = {
+        'operationName':'SeriesDocsFilterContent',
+        'variables':{
+          'filter': url,
+          # Able to get ALL shows by setting 'first' to 0
+          'first':0
+        },
+        'query':'query SeriesDocsFilterContent($filter: String, $first: Int) {\n filterData: getTVOOrgCategoriesByFilter(\n filter: $filter\n first: $first\n ) {\n content {\n programTitle\n path\n imageSrc\n season\n episode\n program {\n coverImage\n featuredImage\n }\n }\n }\n}\n'
+      }
+      response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
+      shows_js = json.loads(response.text)
+ 
+      # Loop through all shows in the category
+      for show in shows_js["data"]["filterData"][0]["content"]:
+          episodes = int(show["episode"])
+          seasons  = int(show["season"])
+          url      = show["path"]
+          plot     = show["programTitle"]
+          thumb    = show["imageSrc"]
+          cover    = show["program"]["coverImage"]
+          if cover == "": cover = thumb
+          if episodes > 1:
+              name = "%s (Series)" % (show["programTitle"])
+          else:
+              name = show["programTitle"]
+          infoList= {'mediatype': 'tvshow',
+                     'Title': name,
+                     'episode': episodes,
+                     'season': seasons,
+                     'Plot': plot}
+          if 'The Agenda' in name:
+              ilist = self.addMenuItem(name, 'GE', ilist, url+'|2|0', cover, thumb, infoList, isFolder=True)
+          elif episodes > 1:
+              ilist = self.addMenuItem(name, 'GE', ilist, url+'|1|0', cover, thumb, infoList, isFolder=True)
+          else:
+              ilist = self.addMenuItem(name, 'GM', ilist, url, cover, thumb, infoList, isFolder=True)
+      return ilist
  
 
-  def getAddonEpisodes(self, url, ilist):
+  def getAddonShows(self, url, ilist):
+      # Split into option and show url
+      showurl = url.split('|', 1)[0]
+      option  = url.split('|', 1)[1] # 1:Most shows other than -> | 2:Podcasts | 3: 'Docs', 'Series', 'A-Z'
+      if   option == '1':
+          ilist = self.getAddonShows1(showurl, ilist)
+      elif option == '2':
+          ilist = self.getAddonShows2(showurl, ilist)
+      elif option == '3':
+          ilist = self.getAddonShows3(showurl, ilist)
+      return ilist
+
+
+  def getAddonEpisodes1(self, url, ilist):
       self.defaultVidStream['width']  = 1280
       self.defaultVidStream['height'] = 720
       json_data = {
@@ -131,7 +185,7 @@ class myAddon(t1mAddon):
       show_title= episodes_js["data"]["getTVOOrgProgramOverview"]["title"]
       # Loop through seasons
       for j in episodes_js["data"]["getTVOOrgProgramOverview"]["seasons"]:
-          season = j["season"]
+          season = int(j["season"])
           for k in j["episodes"]:
               episode = k["episode"]
               title   = k["episodeTitle"]
@@ -144,11 +198,14 @@ class myAddon(t1mAddon):
               infoList= {'mediatype': 'episode',
                          'TVShowTitle': show_title,
                          'Title': name,
-                         'Duration': duration,
+                         'duration': duration,
+                         'episode': episode,
+                         'season': season,
                          'premiered': str(datetime.strptime(aired, '%b %d, %Y').date()),
+                         'date': str(datetime.strptime(aired, '%b %d, %Y').strftime("%d.%m.%Y")),
                          'Plot': plot}
               ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
-      return(ilist)
+      return ilist
 
  
   def getAddonEpisodes2(self, url, ilist):    # For 'The Agenda' as it uses a unique post request
@@ -171,28 +228,32 @@ class myAddon(t1mAddon):
  
       numShows = agenda_js["data"]["recentSegments"]["totalItems"]
       show_title= 'The Agenda'
-      # Loop through seasons
+      # Loop through segments
       for j in agenda_js["data"]["recentSegments"]["content"]:
-          season  = j["season"]
+          season  = int(j["season"])
           episode = j["episode"]
           name    = j["episodeTitle"]
           url     = j["path"]
           thumb   = j["imageSrc"]
           aired   = j["airDate"]
-          plot    = '%s\nAir Date: %s, Season:%s, Episode:%s' % (j["description"], aired, str(season), str(episode))
+          plot    = j["description"]
           duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(j["duration"].split(":"))))
           infoList= {'mediatype': 'episode',
                      'TVShowTitle': '%s - Season:%s, Episode:%s' % (show_title,str(season),str(episode)),
                      'Title': name,
-                     'Duration': duration,
+                     'duration': duration,
+                     'episode': episode,
+                     'season': season,
                      'Plot': plot,
-                     'premiered': str(datetime.strptime(aired, '%b %d, %Y').date())}
+                     'date': str(datetime.strptime(aired, '%b %d, %Y').strftime("%d.%m.%Y")),
+                     'premiered': str(datetime.strptime(aired, '%b %d, %Y').date())
+          }
           ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
       # Add "MORE" prompt if there are more shows to list
-      if ((int(position)+int(AGENDAPAGESIZE)) < numShows):
-          nextUrl = showurl + '|' + str(int(position)+int(AGENDAPAGESIZE))
-          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GE2', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
-      return(ilist)
+      if (int(position) + int(AGENDAPAGESIZE)) < numShows:
+          nextUrl = showurl + '|2|' + str(int(position)+int(AGENDAPAGESIZE))
+          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GE', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
+      return ilist
  
 
   def getAddonEpisodes3(self, url, ilist):  # Get TVO Podcast episodes
@@ -213,9 +274,9 @@ class myAddon(t1mAddon):
  
       show_title= episodes_js["data"]["podcast"]["program"]["title"]
       numEpisodes= episodes_js["data"]["podcast"]["program"]["defaultPlaylist"]["totalItems"]
-      # Loop through seasons
+      # Loop through episodes
       for j in episodes_js["data"]["podcast"]["program"]["defaultPlaylist"]["content"]:
-          season  = j["season"]
+          season  = int(j["season"])
           episode = j["episode"]
           name    = j["title"]
           url     = j["omnyAssetUrl"]
@@ -226,15 +287,31 @@ class myAddon(t1mAddon):
           infoList= {'mediatype': 'episode',
                      'TVShowTitle': show_title,
                      'Title': name,
-                     'Duration': int(duration),
+                     'duration': int(duration),
+                     'episode': episode,
+                     'season': season,
                      'premiered': str(datetime.fromisoformat(aired[:10]).date()),
+                     'date': str(datetime.fromisoformat(aired[:10]).strftime("%d.%m.%Y")),
                      'Plot': plot}
           ilist = self.addMenuItem(name, 'GA', ilist, url, thumb, thumb, infoList, isFolder=False)
       # Add "MORE" prompt if there are more episodes to list
-      if ((int(page)*int(PODCASTPAGESIZE)) < numEpisodes):
-          nextUrl = podurl + '|' + str(int(page)+1)
-          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GE3', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
-      return(ilist)
+      if (int(page) * int(PODCASTPAGESIZE)) < numEpisodes:
+          nextUrl = podurl + '|3|' + str(int(page)+1)
+          ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'GE', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
+      return ilist
+
+ 
+  def getAddonEpisodes(self, url, ilist):
+      show  = url.split('|', 2)[0]
+      option= url.split('|', 2)[1]  # 1:All shows except -> | 2:The Agenda | 3:Podcasts
+      page  = url.split('|', 2)[2]
+      if   option == '1':
+          ilist = self.getAddonEpisodes1(show, ilist)
+      elif option == '2':
+          ilist = self.getAddonEpisodes2(show+'|'+page, ilist)
+      elif option == '3':
+          ilist = self.getAddonEpisodes3(show+'|'+page, ilist)
+      return ilist
 
 
   def getAddonMovies(self, url, ilist):
@@ -247,20 +324,23 @@ class myAddon(t1mAddon):
       }
       response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
       movie_js = json.loads(response.text)
- 
-      movie = movie_js["data"]["getTVOOrgVideo"]
-      name    = movie["title"]
-      url     = movie["nodeUrl"]
-      thumb   = movie["thumbnail"]
-      cover   = movie["program"]["coverImage"]
-      plot    = movie["description"]
-      duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(movie["length"].split(":"))))
-      infoList= {'mediatype': 'movie',
-                 'Title': name,
-                 'Duration': duration,
-                 'Plot': plot}
-      ilist = self.addMenuItem(name, 'GV', ilist, url, cover, thumb, infoList, isFolder=False)
-      return(ilist)
+
+      if 'errors' in movie_js:
+          ilist = self.getAddonEpisodes1(url, ilist)
+      else: 
+          movie = movie_js["data"]["getTVOOrgVideo"]
+          name    = movie["title"]
+          url     = movie["nodeUrl"]
+          thumb   = movie["thumbnail"]
+          cover   = movie["program"]["coverImage"]
+          plot    = movie["description"]
+          duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(movie["length"].split(":"))))
+          infoList= {'mediatype': 'movie',
+                     'Title': name,
+                     'duration': duration,
+                     'Plot': plot}
+          ilist = self.addMenuItem(name, 'GV', ilist, url, cover, thumb, infoList, isFolder=False)
+      return ilist
  
 
   def getAddonVideo(self, url):
@@ -287,14 +367,14 @@ class myAddon(t1mAddon):
       xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, liz)
 
 
-  def getAddonSearchQuery(self, url, ilist):  # First step in two step process; to fix the refresh asking for input again
+  def getAddonSearchQuery(self, url, ilist):  # First step in two-step process; to fix the refresh asking for input again
       query = xbmcgui.Dialog().input('Enter search term')
-      infoList = {'Title': "Search for: '%s'" % (query)}
-      ilist = self.addMenuItem('Results', 'SE', ilist, query+'|1', self.addonIcon, self.addonFanart, infoList, isFolder=True)
-      return(ilist)
+      infoList = {'Title': "Search for: '%s'" % query}
+      ilist = self.addMenuItem('Results', 'SE', ilist, query+'|2|1', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+      return ilist
 
 
-  def getAddonSearch(self, url, ilist):
+  def getAddonSearchSearch(self, url, ilist):
       query = url.split('|', 1)[0]
       page  = int(url.split('|', 1)[1])
       self.defaultVidStream['width']  = 1280
@@ -317,15 +397,29 @@ class myAddon(t1mAddon):
                           'TVShowTitle': title,
                           'Title': title,
                           'Plot': plot,
+                          'duration': 0,
+                          'episode': 0,
                           'premiered': str(datetime.fromisoformat(aired[:10]).date()),
+                          'date': str(datetime.fromisoformat(aired[:10]).strftime("%d.%m.%Y")),
               }
               ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
       # Add "MORE" prompt if there are more search results to list
       pages = search_js["info"]["page"]["num_pages"]
       if page < int(pages):
-          nextUrl = query + '|' + str(page+1)
+          nextUrl = query + '|2|' + str(page+1)
           ilist = self.addMenuItem('[COLOR red]MORE[/COLOR]', 'SE', ilist, nextUrl, self.addonIcon, self.addonFanart, {}, isFolder=True)
-      return(ilist)
+      return ilist
+
+
+  def getAddonSearch(self, url, ilist):
+      query = url.split('|', 2)[0]
+      option= url.split('|', 2)[1]  # 1:Query | 2:Search
+      page  = url.split('|', 2)[2]
+      if   option == '1':
+          ilist = self.getAddonSearchQuery(query,ilist)
+      elif option == '2':
+          ilist = self.getAddonSearchSearch(query+'|'+page,ilist)
+      return ilist
 
 
   def getAddonListing(self, url, ilist):   # Get TVO Schedule
@@ -369,9 +463,9 @@ class myAddon(t1mAddon):
                           'Title': '%s - %s (%s)' % (airDate, seriesTitle, title),
                           'Plot' : '%s\n"%s"\n%s' % (day, title, description),
               }
-              if option == 1 and timeOfDay in ['Evening', 'Late Night']:
+              if   option == 1 and timeOfDay in ['Evening', 'Late Night']:
                   ilist = self.addMenuItem('', 'GL', ilist, url+'|3', self.addonIcon, self.addonFanart, infoList, isFolder=True)
               elif option == 2:
                   ilist = self.addMenuItem('', 'GL', ilist, url+'|3', self.addonIcon, self.addonFanart, infoList, isFolder=True)
-      return(ilist)
+      return ilist
 
