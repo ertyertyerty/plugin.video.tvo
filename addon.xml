@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addon id="plugin.video.tvo"
        name="TV Ontario"
-       version="4.0.1"
+       version="5.0.0"
        provider-name="ertyertyerty">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
-    <import addon="script.module.t1mlib" version="4.0.8"/>
+    <import addon="script.module.t1mlib" version="5.0.0"/>
     <import addon="script.module.requests" version="2.6.0"/>
   </requires>
   <extension point="xbmc.python.pluginsource"
@@ -22,7 +22,7 @@
     <forum>https://forum.kodi.tv/showthread.php?tid=222346</forum>
     <website>tvo.org</website>
     <source>https://github.com/ertyertyerty</source>
-    <news>Version 4.0
+    <news>Version 5.0
     </news>
     <assets>
         <icon>resources/icon.png</icon>

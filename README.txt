@@ -1,7 +1,5 @@
-plugin.video.tvo
-================
+# TVOntario Add-on
 
 Kodi Addon for TVO.org website videos
 
-Version 4.0.1 for Matrix, updated 2022-10-08
-
+Version 5.0.0 for Matrix, updated 2023-03-17
