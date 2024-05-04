@@ -8,7 +8,7 @@ import xbmcplugin
 import xbmcgui
 import sys
 import requests
-from datetime import datetime
+from time import strftime, strptime
  
 URL_GRAPHQL_SERVER = "https://hmy0rc1bo2.execute-api.ca-central-1.amazonaws.com/graphql"
 USERAGENT = 'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.101 Safari/537.36'
@@ -199,6 +199,13 @@ class myAddon(t1mAddon):
               thumb   = k["imageSrc"]
               plot    = k["description"]
               aired   = k["airDate"]
+              try:
+                  dateraw  = strptime(aired, '%b %d, %Y')
+                  datedash = strftime('%Y-%m-%d', dateraw)
+                  datedot  = strftime("%d.%m.%Y", dateraw)
+              except ValueError:
+                  datedash = '1970-01-01'
+                  datedot  = '01.01.1970'
               if str(episode).isdigit(): episode = int(episode)
               duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(k["duration"].split(":"))))
               infoList= {'mediatype': 'episode',
@@ -207,8 +214,8 @@ class myAddon(t1mAddon):
                          'duration': duration,
                          'episode': episode,
                          'season': season,
-                         'premiered': str(datetime.strptime(aired, '%b %d, %Y').date()),
-                         'date': str(datetime.strptime(aired, '%b %d, %Y').strftime("%d.%m.%Y")),
+                         'premiered': datedash,
+                         'date': datedot,
                          'Plot': plot}
               ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
       return ilist
@@ -243,6 +250,13 @@ class myAddon(t1mAddon):
           thumb   = j["imageSrc"]
           aired   = j["airDate"]
           plot    = j["description"]
+          try:
+              dateraw  = strptime(aired, '%b %d, %Y')
+              datedash = strftime('%Y-%m-%d', dateraw)
+              datedot  = strftime("%d.%m.%Y", dateraw)
+          except ValueError:
+              datedash = '1970-01-01'
+              datedot  = '01.01.1970'
           if str(season).isdigit(): season = int(season)
           if str(episode).isdigit(): episode = int(episode)
           duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(j["duration"].split(":"))))
@@ -253,8 +267,8 @@ class myAddon(t1mAddon):
                      'episode': episode,
                      'season': season,
                      'Plot': plot,
-                     'date': str(datetime.strptime(aired, '%b %d, %Y').strftime("%d.%m.%Y")),
-                     'premiered': str(datetime.strptime(aired, '%b %d, %Y').date())
+                     'premiered': datedash,
+                     'date': datedot,
           }
           ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
       # Add "MORE" prompt if there are more shows to list
@@ -292,6 +306,13 @@ class myAddon(t1mAddon):
           plot    = j["description"]
           duration= j["duration"]
           aired   = j["publishedAt"]
+          try:
+              dateraw  = strptime(aired[:10], '%Y-%m-%d')
+              datedash = strftime('%Y-%m-%d', dateraw)
+              datedot  = strftime("%d.%m.%Y", dateraw)
+          except ValueError:
+              datedash = '1970-01-01'
+              datedot  = '01.01.1970'
           if str(season).isdigit(): season = int(season)
           if str(episode).isdigit(): episode = int(episode)
           if str(duration).isdigit(): duration = int(duration)
@@ -301,8 +322,8 @@ class myAddon(t1mAddon):
                      'duration': duration,
                      'episode': episode,
                      'season': season,
-                     'premiered': str(datetime.fromisoformat(aired[:10]).date()),
-                     'date': str(datetime.fromisoformat(aired[:10]).strftime("%d.%m.%Y")),
+                     'premiered': datedash,
+                     'date': datedot,
                      'Plot': plot}
           ilist = self.addMenuItem(name, 'GA', ilist, url, thumb, thumb, infoList, isFolder=False)
       # Add "MORE" prompt if there are more episodes to list
@@ -402,6 +423,13 @@ class myAddon(t1mAddon):
               name   = j["title"]
               thumb  = j["image"]
               aired  = j["published_at"]
+              try:
+                  dateraw  = strptime(aired[:10], '%Y-%m-%d')
+                  datedash = strftime('%Y-%m-%d', dateraw)
+                  datedot  = strftime("%d.%m.%Y", dateraw)
+              except ValueError:
+                  datedash = '1970-01-01'
+                  datedot  = '01.01.1970'
               url    = j["url"].replace('https://www.tvo.org','')
               plot   = j["desc"]
               infoList = {'mediatype': 'movie',
@@ -410,8 +438,8 @@ class myAddon(t1mAddon):
                           'Plot': plot,
                           'duration': 0,
                           'episode': 0,
-                          'premiered': str(datetime.fromisoformat(aired[:10]).date()),
-                          'date': str(datetime.fromisoformat(aired[:10]).strftime("%d.%m.%Y")),
+                          'premiered': datedash,
+                          'date': datedot,
               }
               ilist = self.addMenuItem(name, 'GV', ilist, url, thumb, thumb, infoList, isFolder=False)
       # Add "MORE" prompt if there are more search results to list

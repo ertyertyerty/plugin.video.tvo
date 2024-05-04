@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addon id="plugin.video.tvo"
        name="TV Ontario"
-       version="5.0.0"
+       version="5.0.1"
        provider-name="ertyertyerty">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
@@ -22,7 +22,7 @@
     <forum>https://forum.kodi.tv/showthread.php?tid=222346</forum>
     <website>tvo.org</website>
     <source>https://github.com/ertyertyerty</source>
-    <news>Version 5.0
+    <news>Version 5.0.1 - handle ValueError exceptions from datetime.strptime
     </news>
     <assets>
         <icon>resources/icon.png</icon>
