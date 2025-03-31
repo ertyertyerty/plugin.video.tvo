@@ -35,12 +35,13 @@ class myAddon(t1mAddon):
       for cat in cats_js["data"]["getTVOOrgCategoriesMenu"]:
           name = cat["categoryTitle"]
           plot = cat["path"]
-          url  = name
+          names = plot.split('/')
+          url  = names[-1]
           infoList = {'mediatype':'tvshow',
                       'Title': name,
                       'Plot': plot}
           # Screen out 'All' and 'National Geographic'; separate function for 'Series', 'Docs', 'A-Z'
-          if name in ['Series', 'Docs', 'A-Z']:
+          if 'filters' in names[-2]:
               ilist = self.addMenuItem(name, 'GS', ilist, url+'||3', self.addonIcon, self.addonFanart, infoList, isFolder=True)
           elif name not in ['All', 'National Geographic']:
               ilist = self.addMenuItem(name, 'GS', ilist, url+'||1', self.addonIcon, self.addonFanart, infoList, isFolder=True)
@@ -122,7 +123,7 @@ class myAddon(t1mAddon):
       json_data = {
         'operationName':'SeriesDocsFilterContent',
         'variables':{
-          'filter': url,
+          'filter': url.lower(),
           # Able to get ALL shows by setting 'first' to 0
           'first':0
         },
