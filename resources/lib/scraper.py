@@ -27,8 +27,8 @@ class myAddon(t1mAddon):
   def getAddonMenu(self, url, ilist):
       json_data = {
         'operationName': 'SeriesAndDocsNav',
-        'variables': {},
-        'query': 'query SeriesAndDocsNav {\n getTVOOrgCategoriesMenu {\n categoryTitle\n path\n }\n}\n'
+        'variables': { 'subfilter': ''},
+        'query': 'query SeriesAndDocsNav ($subfilter: String) {\n getTVOOrgCategoriesMenu (subfilter: $subfilter) {\n categoryTitle\n path\n }\n}\n'
       }
       response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
       cats_js = json.loads(response.text)
@@ -40,9 +40,13 @@ class myAddon(t1mAddon):
           infoList = {'mediatype':'tvshow',
                       'Title': name,
                       'Plot': plot}
-          # Screen out 'All' and 'National Geographic'; separate function for 'Series', 'Docs', 'A-Z'
+          # Separate function for 'Series', 'Docs', 'A-Z' (which use a SeriesDocsFilterContent query)
           if 'filters' in names[-2]:
-              ilist = self.addMenuItem(name, 'GS', ilist, url+'||3', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+              if name != 'A-Z':
+                  ilist = self.addMenuItem(name, 'GS', ilist, url+'||3||"#ABC"', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+              else:
+                  ilist = self.addMenuItem(name, 'GL', ilist, url+'||4', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+          # Screen out 'All' and 'National Geographic'
           elif name not in ['All', 'National Geographic']:
               ilist = self.addMenuItem(name, 'GS', ilist, url+'||1', self.addonIcon, self.addonFanart, infoList, isFolder=True)
       ilist = self.addMenuItem('Podcasts', 'GS', ilist, '||2', self.addonIcon, self.addonFanart, {}, isFolder=True)
@@ -58,7 +62,7 @@ class myAddon(t1mAddon):
           # Able to get ALL shows by setting 'first' and 'after' to 0
           'first': 0,
           'after': 0,
-          'category': url,
+          'category': url
         },
         'query': 'query SeriesDocsCategory($category: String!, $first: Int, $after: Int) {\n categoryData: getTVOOrgCategoriesByName(\n name: $category\n first: $first\n after: $after\n) {\n totalItems\n content {\n programTitle\n path\n imageSrc\n episode\n program {\n coverImage\n }\n }\n }\n}\n'
       }
@@ -67,8 +71,7 @@ class myAddon(t1mAddon):
  
       # Loop through all shows in the category
       for show in shows_js["data"]["categoryData"][0]["content"]:
-          episodes = show["episode"]
-          if str(episodes).isdigit(): episodes = int(episodes)
+          episodes = self.cleanInt(show["episode"])
           if episodes > 1:
               name = "%s (Series)" % (show["programTitle"])
           else:
@@ -104,12 +107,11 @@ class myAddon(t1mAddon):
       # Loop through all shows in the category
       for j in shows_js["data"]["programs"]:
           show     = j["program"]
-          episodes = show["defaultPlaylist"]["totalItems"]
-          name     = "%s (%s episodes)" % (show["title"], episodes)
+          episodes = self.cleanInt(show["defaultPlaylist"]["totalItems"])
+          name     = "%s (%s episodes)" % (show["title"], str(episodes))
           url      = show["omnySlug"]
           thumb    = show["featuredImage"]
           plot     = show["description"]
-          if str(episodes).isdigit(): episodes = int(episodes)
           infoList= {'mediatype': 'tvshow',
                      'Title': name,
                      'episode': episodes,
@@ -120,28 +122,29 @@ class myAddon(t1mAddon):
 
 
   def getAddonShows3(self, url, ilist):   # Get 'Docs', 'Series' and 'A-Z'
+      showurl   = url.split('||', 1)[0]
+      subfilter = url.split('||', 1)[1]
       json_data = {
         'operationName':'SeriesDocsFilterContent',
         'variables':{
-          'filter': url.lower(),
+          'filter': showurl.lower(),
+          'subfilter': subfilter,
           # Able to get ALL shows by setting 'first' to 0
           'first':0
         },
-        'query':'query SeriesDocsFilterContent($filter: String, $first: Int) {\n filterData: getTVOOrgCategoriesByFilter(\n filter: $filter\n first: $first\n ) {\n content {\n programTitle\n path\n imageSrc\n season\n episode\n program {\n coverImage\n featuredImage\n }\n }\n }\n}\n'
+        'query':'query SeriesDocsFilterContent($filter: String, $subfilter: String, $first: Int) {\n filterData: getTVOOrgCategoriesByFilter(\n filter: $filter\n subfilter: $subfilter\n first: $first\n ) {\n content {\n programTitle\n path\n imageSrc\n season\n episode\n program {\n coverImage\n featuredImage\n }\n }\n }\n}\n'
       }
       response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
       shows_js = json.loads(response.text)
  
       # Loop through all shows in the category
       for show in shows_js["data"]["filterData"][0]["content"]:
-          seasons  = show["season"]
-          episodes = show["episode"]
+          seasons  = self.cleanInt(show["season"])
+          episodes = self.cleanInt(show["episode"])
           url      = show["path"]
           plot     = show["programTitle"]
           thumb    = show["imageSrc"]
           cover    = show["program"]["coverImage"]
-          if str(seasons).isdigit(): seasons = int(seasons)
-          if str(episodes).isdigit(): episodes = int(episodes)
           if cover == "": cover = thumb
           if episodes > 1:
               name = "%s (Series)" % (show["programTitle"])
@@ -163,18 +166,19 @@ class myAddon(t1mAddon):
 
   def getAddonShows(self, url, ilist):
       # Split into option and show url
-      showurl = url.split('||', 1)[0]
-      option  = url.split('||', 1)[1] # 1:Most shows other than -> | 2:Podcasts | 3: 'Docs', 'Series', 'A-Z'
+      showurl = url.split('||', 2)[0]
+      option  = url.split('||', 2)[1] # 1:Most shows other than -> | 2:Podcasts | 3: 'Docs', 'Series', 'A-Z'
       if   option == '1':
           ilist = self.getAddonShows1(showurl, ilist)
       elif option == '2':
           ilist = self.getAddonShows2(showurl, ilist)
       elif option == '3':
-          ilist = self.getAddonShows3(showurl, ilist)
+          subfilter = url.split('||', 3)[2]
+          ilist = self.getAddonShows3(showurl+'||'+subfilter, ilist)
       return ilist
 
 
-  def getAddonEpisodes1(self, url, ilist):
+  def getAddonEpisodes1(self, url, ilist): # For episodes other than 'The Agenda' or podcasts
       self.defaultVidStream['width']  = 1280
       self.defaultVidStream['height'] = 720
       json_data = {
@@ -190,10 +194,9 @@ class myAddon(t1mAddon):
       show_title= episodes_js["data"]["getTVOOrgProgramOverview"]["title"]
       # Loop through seasons
       for j in episodes_js["data"]["getTVOOrgProgramOverview"]["seasons"]:
-          season = j["season"]
-          if str(season).isdigit(): season = int(season)
+          season = self.cleanInt(j["season"])
           for k in j["episodes"]:
-              episode = k["episode"]
+              episode = self.cleanInt(k["episode"])
               title   = k["episodeTitle"]
               name    = 'S%sE%s - %s' % (str(season), str(episode), str(title))
               url     = k["path"]
@@ -207,7 +210,6 @@ class myAddon(t1mAddon):
               except ValueError:
                   datedash = '1970-01-01'
                   datedot  = '01.01.1970'
-              if str(episode).isdigit(): episode = int(episode)
               duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(k["duration"].split(":"))))
               infoList= {'mediatype': 'episode',
                          'TVShowTitle': show_title,
@@ -229,23 +231,23 @@ class myAddon(t1mAddon):
       showurl  = url.split('||', 1)[0]
       position = url.split('||', 1)[1]
       json_data = {
-        'operationName': 'AgendaRecentSegments',
+        'operationName': 'RecentSegments',
         'variables': {
           'name'  : 'theagenda',
           'first' : int(AGENDAPAGESIZE),
           'after' : int(position),
         },
-        'query': 'query AgendaRecentSegments($name: String!, $first: Int, $after: Int) {\n recentSegments: getTVOSpecialProgramContent(\n name: $name\n first: $first\n after: $after\n ) {\n totalItems\n content {\n path\n imageSrc\n season\n episode\n episodeTitle\n description\n airDate\n duration\n }\n }\n}\n'
+        'query': 'query RecentSegments($name: String!, $first: Int, $after: Int) {\n recentSegments: getTVOSpecialProgramContent(\n name: $name\n first: $first\n after: $after\n ) {\n totalItems\n content {\n path\n imageSrc\n season\n episode\n episodeTitle\n description\n airDate\n duration\n }\n }\n}\n'
       }
       response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
       agenda_js = json.loads(response.text)
  
-      numShows = agenda_js["data"]["recentSegments"]["totalItems"]
+      numShows = self.cleanInt(agenda_js["data"]["recentSegments"]["totalItems"])
       show_title= 'The Agenda'
       # Loop through segments
       for j in agenda_js["data"]["recentSegments"]["content"]:
-          season  = j["season"]
-          episode = j["episode"]
+          season  = self.cleanInt(j["season"])
+          episode = self.cleanInt(j["episode"])
           name    = j["episodeTitle"]
           url     = j["path"]
           thumb   = j["imageSrc"]
@@ -258,8 +260,6 @@ class myAddon(t1mAddon):
           except ValueError:
               datedash = '1970-01-01'
               datedot  = '01.01.1970'
-          if str(season).isdigit(): season = int(season)
-          if str(episode).isdigit(): episode = int(episode)
           duration= sum(x * int(t) for x,t in zip([1, 60, 3600], reversed(j["duration"].split(":"))))
           infoList= {'mediatype': 'episode',
                      'TVShowTitle': '%s - Season:%s, Episode:%s' % (show_title,str(season),str(episode)),
@@ -299,13 +299,13 @@ class myAddon(t1mAddon):
       numEpisodes= episodes_js["data"]["podcast"]["program"]["defaultPlaylist"]["totalItems"]
       # Loop through episodes
       for j in episodes_js["data"]["podcast"]["program"]["defaultPlaylist"]["content"]:
-          season  = j["season"]
-          episode = j["episode"]
+          season  = self.cleanInt(j["season"])
+          episode = self.cleanInt(j["episode"])
           name    = j["title"]
           url     = j["omnyAssetUrl"]
           thumb   = j["featuredImage"]
           plot    = j["description"]
-          duration= j["duration"]
+          duration= self.cleanInt(j["duration"])
           aired   = j["publishedAt"]
           try:
               dateraw  = strptime(aired[:10], '%Y-%m-%d')
@@ -314,9 +314,6 @@ class myAddon(t1mAddon):
           except ValueError:
               datedash = '1970-01-01'
               datedot  = '01.01.1970'
-          if str(season).isdigit(): season = int(season)
-          if str(episode).isdigit(): episode = int(episode)
-          if str(duration).isdigit(): duration = int(duration)
           infoList= {'mediatype': 'episode',
                      'TVShowTitle': show_title,
                      'Title': name,
@@ -462,7 +459,7 @@ class myAddon(t1mAddon):
       return ilist
 
 
-  def getAddonListing(self, url, ilist):   # Get TVO Schedule
+  def getAddonListing(self, url, ilist):   # Get TVO Schedule (option 1,2,3) or 'A-Z' subsections (option 4)
       day    = url.split('||', 1)[0]
       option = int(url.split('||', 1)[1])
       if option == 0:   # Display the list of available days
@@ -504,8 +501,29 @@ class myAddon(t1mAddon):
                           'Plot' : '%s\n"%s"\n%s' % (day, title, description),
               }
               if   option == 1 and timeOfDay in ['Evening', 'Late Night']:
-                  ilist = self.addMenuItem('', 'GL', ilist, url+'||3', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+                  ilist = self.addMenuItem('', 'GL', ilist, url+'||99', self.addonIcon, self.addonFanart, infoList, isFolder=True)
               elif option == 2:
-                  ilist = self.addMenuItem('', 'GL', ilist, url+'||3', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+                  ilist = self.addMenuItem('', 'GL', ilist, url+'||99', self.addonIcon, self.addonFanart, infoList, isFolder=True)
+      elif option == 4 :  # Option 4: display the alphabetical subsections
+          json_data = {
+            'operationName': 'SeriesAndDocsNav',
+            'variables': { 'subfilter':'a-z' },
+            'query': 'query SeriesAndDocsNav($subfilter: String!) {\n getTVOOrgCategoriesMenu(subfilter: $subfilter) {\n categoryTitle\n }\n}\n'
+          }
+          response = requests.post(URL_GRAPHQL_SERVER, headers=HEADERS, json=json_data)
+          response_js = json.loads(response.text)
+          # Gather the subfilters
+          for j in response_js["data"]["getTVOOrgCategoriesMenu"]:
+              filter = j["categoryTitle"]
+              showurl = day+'||3||'+filter
+              infoList = {'mediatype': 'movie',
+                          'Title': filter
+              }
+              ilist = self.addMenuItem(filter, 'GS', ilist, showurl, self.addonIcon, self.addonFanart, infoList, isFolder=True)
       return ilist
 
+  def cleanInt(self, s): # Return the value as an integer; return 0 if the conversion fails
+      try:
+          return int(s)
+      except:
+          return 0
